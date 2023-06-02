@@ -7,11 +7,16 @@ import org.reactivestreams.Subscription;
 import reactor.core.CoreSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * @author sbalamaci
@@ -98,6 +103,30 @@ public class Part09BackpressureHandling implements BaseTestFlux {
         Helpers.wait(latch);
     }
 
+    public Mono<Integer> randomDelayMono(Integer i, Boolean isMillis, Character character) {
+        Random rand = new Random();
+        Duration delay;
+        if(isMillis) {
+            delay = Duration.ofMillis(rand.nextInt((100 - 10) + 1) + 10);
+        }else {
+            delay = Duration.ofSeconds((rand.nextInt((10 - 1)) + 1));
+        }
+        return Mono.just(i)
+                .delayElement(delay)
+                .doOnNext(x -> log.info(character + ":" + x.toString() + " with delay of " + delay.toMillis()));
+    }
+
+    @Test
+    public void fluxWithExternalServiceWithBackpressureBuffer(){
+        List<Integer> messages = IntStream.rangeClosed(1, 100).boxed().collect(Collectors.toList());
+        Flux.fromIterable(messages)
+                .flatMap(x -> this.randomDelayMono(x, true, 'x'))
+                .onBackpressureBuffer()
+                .bufferTimeout(5, Duration.ofMillis(5))
+                .flatMap(y -> this.randomDelayMono(y.size(), false, 'y'))
+                .doOnError(error -> log.error(error.getMessage()))
+                .blockLast();
+    }
 
 
     /**
